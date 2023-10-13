@@ -1,0 +1,34 @@
+services:
+  gophkeeper:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    image: gophkeeper
+    environment:
+      - DATABASE_URI=postgres://gophkeeper:P@ssw0rd@gophkeeper-db:5432/gophkeeper?sslmode=disable
+    expose:
+      - 8080
+    ports:
+      - "8080:8080"
+    networks:
+      - gophkeeper
+    depends_on:
+      - gophkeeper-db
+    stop_grace_period: 5s
+
+  gophkeeper-db:
+    image: postgres:15.3
+    volumes:
+      - type: bind
+        source: db/init/
+        target: /docker-entrypoint-initdb.d
+      - type: bind
+        source: db/data/
+        target: /var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=P@ssw0rd
+    networks:
+      - gophkeeper
+
+networks:
+  gophkeeper:
