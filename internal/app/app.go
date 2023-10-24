@@ -1,11 +1,14 @@
 package app
 
 import (
+	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -13,7 +16,6 @@ import (
 	"github.com/rawen554/goph-keeper/internal/config"
 	"github.com/rawen554/goph-keeper/internal/middleware/auth"
 	"github.com/rawen554/goph-keeper/internal/models"
-	"github.com/rawen554/goph-keeper/internal/utils"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -84,7 +86,7 @@ func (a *App) Login(c *gin.Context) {
 	}
 	userReq.ID = u.ID
 
-	jwt, err := auth.BuildJWTString(userReq.ID, a.config.Key)
+	jwt, err := auth.BuildJWTString(userReq.ID)
 	if err != nil {
 		a.logger.Errorf("cannot build jwt string for authorized user: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
@@ -92,6 +94,17 @@ func (a *App) Login(c *gin.Context) {
 	}
 	c.SetCookie(auth.CookieName, jwt, maxCookieAge, "", "", false, true)
 	res.WriteHeader(http.StatusOK)
+}
+
+func (a *App) Logout(c *gin.Context) {
+	userID := c.GetUint64(auth.UserIDKey.ToString())
+	res := c.Writer
+	if userID == 0 {
+		res.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	c.SetCookie(auth.CookieName, "", -1, "", "", false, true)
 }
 
 func (a *App) Register(c *gin.Context) {
@@ -130,17 +143,17 @@ func (a *App) Register(c *gin.Context) {
 		}
 	}
 
-	jwt, err := auth.BuildJWTString(userReq.ID, a.config.Key)
+	jwt, err := auth.BuildJWTString(userReq.ID)
 	if err != nil {
 		a.logger.Errorf("cannot build jwt string: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	c.SetCookie(auth.CookieName, jwt, maxCookieAge, "", "", false, true)
-	res.WriteHeader(http.StatusOK)
+	c.JSON(http.StatusOK, userReq)
 }
 
-func (a *App) PutOrder(c *gin.Context) {
+func (a *App) PutDataRecord(c *gin.Context) {
 	userID := c.GetUint64(auth.UserIDKey.ToString())
 	req := c.Request
 	res := c.Writer
@@ -154,35 +167,33 @@ func (a *App) PutOrder(c *gin.Context) {
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	number := string(body)
 
-	if isValidLuhn := utils.IsValidLuhn(number); !isValidLuhn {
-		res.WriteHeader(http.StatusUnprocessableEntity)
+	parts := bytes.Split(body, []byte(":"))
+	if len(parts) <= 1 {
+		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	if err := a.store.PutOrder(number, userID); err != nil {
-		switch {
-		case errors.Is(err, models.ErrOrderHasBeenProcessedByAnotherUser):
-			res.WriteHeader(http.StatusConflict)
-			return
-
-		case errors.Is(err, models.ErrOrderHasBeenProcessedByUser):
-			res.WriteHeader(http.StatusOK)
-			return
-
-		default:
-			a.logger.Errorf("unhandled error: %v", err)
-			res.WriteHeader(http.StatusInternalServerError)
-			return
-		}
+	data := &models.DataRecord{
+		Type:    models.PASS,
+		Blocked: false,
 	}
 
-	res.WriteHeader(http.StatusAccepted)
+	data.Checksum = fmt.Sprintf("%x", md5.Sum(body))
+	data.Data = string(body)
+	data.UserID = userID
+
+	if err := a.store.PutDataRecord(data, userID); err != nil {
+		a.logger.Errorf("unhandled error: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
 }
 
 //nolint:dupl // code deduplication will lead to bad code extending in future
-func (a *App) GetOrders(c *gin.Context) {
+func (a *App) GetDataRecords(c *gin.Context) {
 	userID := c.GetUint64(auth.UserIDKey.ToString())
 	res := c.Writer
 	if userID == 0 {
@@ -190,9 +201,9 @@ func (a *App) GetOrders(c *gin.Context) {
 		return
 	}
 
-	orders, err := a.store.GetUserOrders(userID)
+	orders, err := a.store.GetUserRecords(userID)
 	if err != nil {
-		if errors.Is(err, models.ErrUserHasNoItems) {
+		if errors.Is(err, models.ErrNoData) {
 			res.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -205,86 +216,35 @@ func (a *App) GetOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, orders)
 }
 
-//nolint:dupl // code deduplication will lead to bad code extending in future
-func (a *App) GetWithdrawals(c *gin.Context) {
-	userID := c.GetUint64(auth.UserIDKey.ToString())
+func (a *App) GetDataRecord(c *gin.Context) {
 	res := c.Writer
+	recordID := c.Param("id")
+	preparedRecordID, err := strconv.ParseUint(recordID, 10, 64)
+	if err != nil {
+		res.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	userID := c.GetUint64(auth.UserIDKey.ToString())
+
 	if userID == 0 {
 		res.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
-	withdrawals, err := a.store.GetWithdrawals(userID)
+	orders, err := a.store.GetUserRecord(preparedRecordID, userID)
 	if err != nil {
-		if errors.Is(err, models.ErrUserHasNoItems) {
+		if errors.Is(err, models.ErrNoData) {
 			res.WriteHeader(http.StatusNoContent)
 			return
 		}
 
-		a.logger.Errorf("unknown error: %v", err)
+		a.logger.Errorf("error getting user orders: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	c.JSON(http.StatusOK, withdrawals)
-}
-
-func (a *App) GetBalance(c *gin.Context) {
-	userID := c.GetUint64(auth.UserIDKey.ToString())
-	res := c.Writer
-	if userID == 0 {
-		res.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	balance, err := a.store.GetUserBalance(userID)
-	if err != nil {
-		a.logger.Errorf("Error getting user balance: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	res.WriteHeader(http.StatusOK)
-	res.Header().Add("Content-Type", "application/json")
-	if err := json.NewEncoder(res).Encode(balance); err != nil {
-		a.logger.Errorf("Error writing response in JSON: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-}
-
-func (a *App) BalanceWithdraw(c *gin.Context) {
-	userID := c.GetUint64(auth.UserIDKey.ToString())
-	res := c.Writer
-	req := c.Request
-	if userID == 0 {
-		res.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	var withdrawRequest models.BalanceWithdrawShema
-	if err := json.NewDecoder(req.Body).Decode(&withdrawRequest); err != nil {
-		a.logger.Errorf("Body cannot be decoded: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	if isValidLuhn := utils.IsValidLuhn(withdrawRequest.Order); !isValidLuhn {
-		res.WriteHeader(http.StatusUnprocessableEntity)
-		return
-	}
-
-	if err := a.store.CreateWithdraw(userID, withdrawRequest); err != nil {
-		if errors.Is(err, store.ErrNotEnoughAmount) {
-			res.WriteHeader(http.StatusPaymentRequired)
-			return
-		}
-		a.logger.Errorf("cant save withdraw: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	res.WriteHeader(http.StatusOK)
+	c.JSON(http.StatusOK, orders)
 }
 
 func (a *App) Ping(c *gin.Context) {

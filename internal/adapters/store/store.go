@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
@@ -28,13 +27,9 @@ type DBStore struct {
 type Store interface {
 	CreateUser(user *models.User) (int64, error)
 	GetUser(u *models.User) (*models.User, error)
-	PutOrder(number string, userID uint64) error
-	UpdateOrder(o *models.Order) (int64, error)
-	GetUserOrders(userID uint64) ([]models.Order, error)
-	GetUnprocessedOrders() ([]models.Order, error)
-	GetUserBalance(userID uint64) (*models.UserBalanceShema, error)
-	CreateWithdraw(userID uint64, w models.BalanceWithdrawShema) error
-	GetWithdrawals(userID uint64) ([]models.Withdraw, error)
+	PutDataRecord(data *models.DataRecord, userID uint64) error
+	GetUserRecord(recordID uint64, userID uint64) (*models.DataRecord, error)
+	GetUserRecords(userID uint64) ([]models.DataRecord, error)
 	Ping() error
 	Close()
 }
@@ -50,12 +45,12 @@ var ErrLoginNotFound = errors.New("login not found")
 var ErrDuplicateLogin = errors.New("login already registered")
 var ErrNotEnoughAmount = errors.New("not enough balance")
 
-const connectTick = 5
-
 func NewStore(ctx context.Context, dsn string, logLevel string) (Store, error) {
-	conn, err := ConnectLoop(dsn, connectTick*time.Second, time.Minute)
+	conn, err := gorm.Open(postgres.New(postgres.Config{
+		DSN: dsn,
+	}), &gorm.Config{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cant connect to db: %w", err)
 	}
 
 	if err := prepareConnPool(conn); err != nil {
@@ -67,7 +62,7 @@ func NewStore(ctx context.Context, dsn string, logLevel string) (Store, error) {
 	}
 
 	conn.Logger = logger.Default.LogMode(logger.LogLevel(utils.ConvertLogLevelToInt(logLevel)))
-	if err := conn.AutoMigrate(&models.User{}, &models.Order{}, &models.Withdraw{}); err != nil {
+	if err := conn.AutoMigrate(&models.User{}, &models.DataRecord{}); err != nil {
 		return nil, fmt.Errorf("error auto migrating models: %w", err)
 	}
 
@@ -110,29 +105,6 @@ func prepareConnPool(conn *gorm.DB) error {
 	return nil
 }
 
-func ConnectLoop(dsn string, tick time.Duration, timeout time.Duration) (*gorm.DB, error) {
-	ticker := time.NewTicker(tick)
-	defer ticker.Stop()
-
-	timeoutExceeded := time.After(timeout)
-
-	for {
-		select {
-		case <-timeoutExceeded:
-			return nil, fmt.Errorf("db connection failed after %s timeout", timeout)
-		case <-ticker.C:
-			conn, err := gorm.Open(postgres.New(postgres.Config{
-				DSN: dsn,
-			}), &gorm.Config{})
-			if err != nil {
-				log.Printf("error connecting to db: %v", err)
-			} else {
-				return conn, nil
-			}
-		}
-	}
-}
-
 func (db *DBStore) CreateUser(user *models.User) (int64, error) {
 	result := db.conn.Create(user)
 
@@ -161,115 +133,40 @@ func (db *DBStore) GetUser(u *models.User) (*models.User, error) {
 	return &user, result.Error
 }
 
-func (db *DBStore) GetUserBalance(userID uint64) (*models.UserBalanceShema, error) {
-	var user models.User
-	var userBalance models.UserBalanceShema
-	result := db.conn.Model(&user).Where(&models.User{ID: userID}).Take(&userBalance)
-
-	return &userBalance, result.Error
-}
-
-func (db *DBStore) PutOrder(number string, userID uint64) error {
-	var order models.Order
-	result := db.conn.
-		Where(models.Order{Number: number}).
-		Attrs(models.Order{UserID: userID, Status: models.NEW}).
-		FirstOrCreate(&order)
+func (db *DBStore) PutDataRecord(data *models.DataRecord, userID uint64) error {
+	result := db.conn.Where("user_id = ?", userID).Save(&data)
 
 	if err := result.Error; err != nil {
-		return fmt.Errorf("error saving order: %w", err)
-	}
-
-	if order.UserID != userID {
-		return models.ErrOrderHasBeenProcessedByAnotherUser
-	}
-
-	if order.UserID == userID && order.Number == number && result.RowsAffected == 0 {
-		return models.ErrOrderHasBeenProcessedByUser
+		return fmt.Errorf("error saving data: %w", err)
 	}
 
 	return nil
 }
 
-func (db *DBStore) UpdateOrder(o *models.Order) (int64, error) {
-	result := db.conn.Model(o).Updates(&models.Order{Accrual: o.Accrual, Status: o.Status})
-	return result.RowsAffected, result.Error
-}
-
-func (db *DBStore) GetUnprocessedOrders() ([]models.Order, error) {
-	orders := make([]models.Order, 0)
-	result := db.conn.Where(
-		"status = @new OR status = @processing",
-		sql.Named("new", models.NEW), sql.Named("processing", models.PROCESSING),
-	).Find(&orders)
+func (db *DBStore) GetUserRecord(recordID uint64, userID uint64) (*models.DataRecord, error) {
+	record := models.DataRecord{}
+	result := db.conn.Where(&models.DataRecord{UserID: userID, ID: recordID}).Find(&record)
 
 	if err := result.Error; err != nil {
-		return nil, fmt.Errorf("error getting all unprocessed orders: %w", err)
+		return nil, fmt.Errorf("error getting order: %w", err)
 	}
 
-	return orders, nil
+	return &record, nil
 }
 
-func (db *DBStore) GetUserOrders(userID uint64) ([]models.Order, error) {
-	orders := make([]models.Order, 0)
-	result := db.conn.Order("uploaded_at asc").Where(&models.Order{UserID: userID}).Find(&orders)
+func (db *DBStore) GetUserRecords(userID uint64) ([]models.DataRecord, error) {
+	records := make([]models.DataRecord, 0)
+	result := db.conn.Where(&models.DataRecord{UserID: userID}).Find(&records)
 
 	if err := result.Error; err != nil {
 		return nil, fmt.Errorf("error getting all user orders: %w", err)
 	}
 
-	if len(orders) == 0 {
-		return nil, models.ErrUserHasNoItems
+	if len(records) == 0 {
+		return nil, models.ErrNoData
 	}
 
-	return orders, nil
-}
-
-func (db *DBStore) CreateWithdraw(userID uint64, w models.BalanceWithdrawShema) error {
-	u, err := db.GetUser(&models.User{ID: userID})
-	if err != nil {
-		return fmt.Errorf("cant get user: %w", err)
-	}
-
-	if u.Balance < w.Sum {
-		return ErrNotEnoughAmount
-	}
-
-	u.Balance -= w.Sum
-	u.Withdrawn += w.Sum
-
-	err = db.conn.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Save(u).Error; err != nil {
-			return fmt.Errorf("update user balance error: %w", err)
-		}
-
-		if err := tx.Create(&models.Withdraw{OrderNum: w.Order, Sum: w.Sum, UserID: userID}).Error; err != nil {
-			return fmt.Errorf("create withdraw error: %w", err)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("withdraw not commited: %w", err)
-	}
-
-	return nil
-}
-
-func (db *DBStore) GetWithdrawals(userID uint64) ([]models.Withdraw, error) {
-	withdrawals := make([]models.Withdraw, 0)
-	result := db.conn.Order("processed_at asc").Where(&models.Withdraw{UserID: userID}).Find(&withdrawals)
-
-	if err := result.Error; err != nil {
-		return nil, fmt.Errorf("error getting all user withdrawals: %w", err)
-	}
-
-	if len(withdrawals) == 0 {
-		return nil, models.ErrUserHasNoItems
-	}
-
-	return withdrawals, nil
+	return records, nil
 }
 
 func (db *DBStore) Ping() error {

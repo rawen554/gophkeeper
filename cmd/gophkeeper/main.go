@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log"
@@ -11,12 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rawen554/goph-keeper/internal/adapters/accrual"
 	"github.com/rawen554/goph-keeper/internal/adapters/store"
 	"github.com/rawen554/goph-keeper/internal/app"
 	"github.com/rawen554/goph-keeper/internal/config"
 	"github.com/rawen554/goph-keeper/internal/logger"
-	"github.com/rawen554/goph-keeper/internal/processing"
 )
 
 const (
@@ -45,7 +45,7 @@ func run() error {
 		return fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	storage, err := store.NewStore(ctx, config.DatabaseURI, config.LogLevel)
+	storage, err := store.NewStore(ctx, config.DatabaseDSN, config.LogLevel)
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
@@ -66,13 +66,47 @@ func run() error {
 
 	componentsErrs := make(chan error, 1)
 
-	app := app.NewApp(config, storage, logger.With(component, "app"))
-	srv, err := app.NewServer()
+	a := app.NewApp(config, storage, logger.Named("app"))
+	srv, err := a.NewServer()
 	if err != nil {
 		logger.Fatalf("error creating server: %w", err)
 	}
 
 	go func(errs chan<- error) {
+		if config.EnableHTTPS {
+			_, errCert := os.ReadFile(config.TLSCertPath)
+			_, errKey := os.ReadFile(config.TLSKeyPath)
+
+			if errors.Is(errCert, os.ErrNotExist) || errors.Is(errKey, os.ErrNotExist) {
+				privateKey, certBytes, err := app.CreateCertificates(logger.Named("certs-builder"))
+				if err != nil {
+					errs <- fmt.Errorf("error creating tls certs: %w", err)
+					return
+				}
+
+				if err := app.WriteCertificates(certBytes, config.TLSCertPath, privateKey, config.TLSKeyPath, logger); err != nil {
+					errs <- fmt.Errorf("error writing tls certs: %w", err)
+					return
+				}
+			}
+
+			srv.TLSConfig = &tls.Config{
+				MinVersion:         tls.VersionTLS12,
+				ClientAuth:         tls.RequestClientCert,
+				KeyLogWriter:       bufio.NewWriter(os.Stdout),
+				InsecureSkipVerify: true,
+			}
+
+			if err := srv.ListenAndServeTLS(config.TLSCertPath, config.TLSKeyPath); err != nil {
+				if errors.Is(err, http.ErrServerClosed) {
+					return
+				}
+				errs <- fmt.Errorf("run tls server has failed: %w", err)
+				return
+			}
+		}
+
+		logger.Warnf("serving http server %s without TLS: Use only for development", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil {
 			if errors.Is(err, http.ErrServerClosed) {
 				return
@@ -80,21 +114,6 @@ func run() error {
 			errs <- fmt.Errorf("run server has failed: %w", err)
 		}
 	}(componentsErrs)
-
-	accrual, err := accrual.NewAccrualClient(config.AccrualAddr, logger.With(component, "accrual-client"))
-	if err != nil {
-		return fmt.Errorf("failed to create accrual client: %w", err)
-	}
-
-	processingInstance := processing.NewProcessingController(
-		storage,
-		accrual,
-		logger.With(component, "processing-controller"),
-	)
-
-	go func(ctx context.Context) {
-		processingInstance.Process(ctx)
-	}(ctx)
 
 	wg.Add(1)
 	go func() {

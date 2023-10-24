@@ -30,8 +30,11 @@ vendor/
 db/data
 
 # Other
-short-url-db.json
 golangci-lint
 
 # Configs
 .env
+
+# Certs
+*.key
+*.pem

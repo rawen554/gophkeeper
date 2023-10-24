@@ -1,5 +1,5 @@
 BEGIN TRANSACTION;
 
-DROP TYPE order_status;
+DROP TYPE data_type;
 
 COMMIT;
