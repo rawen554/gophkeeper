@@ -16,3 +16,8 @@ type UserCredentialsSchema struct {
 	Login    string `json:"login"`
 	Password string `json:"password"`
 }
+
+type TokenResponse struct {
+	Token     string `json:"token"`
+	ExpiresIn int    `json:"expires_in"`
+}

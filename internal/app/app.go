@@ -92,19 +92,11 @@ func (a *App) Login(c *gin.Context) {
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	c.SetCookie(auth.CookieName, jwt, maxCookieAge, "", "", false, true)
-	res.WriteHeader(http.StatusOK)
-}
 
-func (a *App) Logout(c *gin.Context) {
-	userID := c.GetUint64(auth.UserIDKey.ToString())
-	res := c.Writer
-	if userID == 0 {
-		res.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	c.SetCookie(auth.CookieName, "", -1, "", "", false, true)
+	c.JSON(http.StatusOK, models.TokenResponse{
+		Token:     jwt,
+		ExpiresIn: maxCookieAge,
+	})
 }
 
 func (a *App) Register(c *gin.Context) {
@@ -149,8 +141,11 @@ func (a *App) Register(c *gin.Context) {
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	c.SetCookie(auth.CookieName, jwt, maxCookieAge, "", "", false, true)
-	c.JSON(http.StatusOK, userReq)
+
+	c.JSON(http.StatusOK, models.TokenResponse{
+		Token:     jwt,
+		ExpiresIn: maxCookieAge,
+	})
 }
 
 func (a *App) PutDataRecord(c *gin.Context) {

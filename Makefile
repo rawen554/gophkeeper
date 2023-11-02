@@ -5,6 +5,14 @@ all: ;
 run: build
 	./cmd/gophkeeper/gophkeeper -r :8081
 
+.PHONY: build-client
+build-client:
+	go build -o ./cmd/client/gclient ./cmd/client
+
+.PHONY: run-client
+run-client:
+	./cmd/client/gclient
+
 .PHONY: build
 build:
 	go build -o ./cmd/gophkeeper/gophkeeper ./cmd/gophkeeper

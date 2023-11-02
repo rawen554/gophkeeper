@@ -33,10 +33,10 @@ func (s DataType) Value() (driver.Value, error) {
 type DataRecord struct {
 	UploadedAt time.Time `gorm:"default:now()" json:"uploaded_at"`
 	Type       DataType  `sql:"type:data_type" json:"type"`
-	Blocked    bool      `gorm:"blocked" json:"blocked"`
-	User       User      `gorm:"not null;" json:"-"`
 	Checksum   string    `gorm:"checksum" json:"checksum"`
+	Data       string    `gorm:"data" json:"data"`
+	User       User      `gorm:"not null;" json:"-"`
 	ID         uint64    `gorm:"primaryKey" json:"id"`
 	UserID     uint64    `json:"-"`
-	Data       string    `gorm:"data" json:"data"`
+	Blocked    bool      `gorm:"blocked" json:"blocked"`
 }

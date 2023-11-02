@@ -29,8 +29,6 @@ func (a *App) SetupRouter() (*gin.Engine, error) {
 	protectedUserAPI := r.Group(userAPIRoute)
 	protectedUserAPI.Use(auth.AuthMiddleware(a.logger))
 	{
-		protectedUserAPI.POST("/logout", a.Logout)
-
 		recordsAPI := protectedUserAPI.Group("record")
 		{
 			recordsAPI.POST(rootRoute, a.PutDataRecord)

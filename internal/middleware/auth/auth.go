@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,9 +24,9 @@ func (k key) ToString() string {
 }
 
 const (
-	tokenExp   = time.Hour * 3
-	CookieName = "jwt-token"
-	tokenKey   = "any-key"
+	tokenExp            = time.Hour * 3
+	AuthorizationHeader = "Authorization"
+	tokenKey            = "any-key"
 )
 
 const UserIDKey key = iota
@@ -72,14 +73,16 @@ func GetUserID(tokenString string) (uint64, error) {
 
 func AuthMiddleware(logger *zap.SugaredLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cookie, err := c.Cookie(CookieName)
-		if err != nil {
-			logger.Errorf("Error reading cookie[%v]: %v", CookieName, err)
+		token := c.GetHeader(AuthorizationHeader)
+		if token == "" {
+			logger.Errorf("Error reading header[%v]: %v", AuthorizationHeader, token)
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
+		splitToken := strings.Split(token, "Bearer ")
+		token = splitToken[1]
 
-		userID, err := GetUserID(cookie)
+		userID, err := GetUserID(token)
 		if err != nil {
 			if errors.Is(err, ErrNoUserInToken) || errors.Is(err, ErrTokenNotValid) {
 				c.AbortWithStatus(http.StatusUnauthorized)
