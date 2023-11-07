@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"path"
 	"time"
 
 	"github.com/rawen554/goph-keeper/cmd/client/internal/logic"
@@ -33,6 +35,11 @@ func Register(ctx context.Context) {
 
 	creds, err := logic.Register(login, password)
 	if err != nil {
+		return
+	}
+
+	if err := os.MkdirAll(path.Join(".", login), os.ModeDir); err != nil {
+		fmt.Printf("error creating user's dir: %v", err)
 		return
 	}
 

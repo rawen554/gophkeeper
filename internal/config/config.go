@@ -12,14 +12,13 @@ import (
 )
 
 type ServerConfig struct {
-	RunAddr         string `json:"server_address" env:"SERVER_ADDRESS"`
-	FileStoragePath string `json:"file_storage_path" env:"FILE_STORAGE_PATH"`
-	DatabaseDSN     string `json:"database_dsn" env:"DATABASE_DSN"`
-	Config          string `json:"-" env:"CONFIG"`
-	TLSCertPath     string `json:"tls_cert_path" env:"TLS_CERT_PATH"`
-	TLSKeyPath      string `json:"tls_key_path" env:"TLS_KEY_PATH"`
-	LogLevel        string `env:"LOG_LEVEL" envDefault:"debug"`
-	EnableHTTPS     bool   `json:"enable_https" env:"ENABLE_HTTPS"`
+	RunAddr     string `json:"server_address" env:"SERVER_ADDRESS"`
+	DatabaseDSN string `json:"database_dsn" env:"DATABASE_DSN"`
+	Config      string `json:"-" env:"CONFIG"`
+	TLSCertPath string `json:"tls_cert_path" env:"TLS_CERT_PATH"`
+	TLSKeyPath  string `json:"tls_key_path" env:"TLS_KEY_PATH"`
+	LogLevel    string `env:"LOG_LEVEL" envDefault:"debug"`
+	EnableHTTPS bool   `json:"enable_https" env:"ENABLE_HTTPS"`
 }
 
 var config ServerConfig
@@ -27,11 +26,11 @@ var config ServerConfig
 func ParseFlags() (*ServerConfig, error) {
 	flag.StringVar(&config.RunAddr, "a", ":8080", "address and port to run server")
 	flag.BoolVar(&config.EnableHTTPS, "s", true, "enable https")
-	flag.StringVar(&config.FileStoragePath, "f", "", "file storage path")
 	flag.StringVar(&config.DatabaseDSN, "d", "", "Data Source Name (DSN)")
 	flag.StringVar(&config.Config, "c", "", "Config json file path")
 	flag.StringVar(&config.TLSCertPath, "l", "./certs/cert.pem", "path to tls cert file")
 	flag.StringVar(&config.TLSKeyPath, "k", "./certs/private.pem", "path to tls key file")
+	flag.StringVar(&config.LogLevel, "g", "", "log level")
 	flag.Parse()
 
 	if err := env.Parse(&config); err != nil {

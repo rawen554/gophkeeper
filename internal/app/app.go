@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -135,6 +135,12 @@ func (a *App) Register(c *gin.Context) {
 		}
 	}
 
+	if err := os.MkdirAll(fmt.Sprintf("./userdata/%s-%d/", userReq.Login, userReq.ID), 0700); err != nil {
+		a.logger.Errorf("cannot create user folder: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
 	jwt, err := auth.BuildJWTString(userReq.ID)
 	if err != nil {
 		a.logger.Errorf("cannot build jwt string: %v", err)
@@ -142,7 +148,7 @@ func (a *App) Register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.TokenResponse{
+	c.JSON(http.StatusCreated, models.TokenResponse{
 		Token:     jwt,
 		ExpiresIn: maxCookieAge,
 	})
@@ -157,25 +163,41 @@ func (a *App) PutDataRecord(c *gin.Context) {
 		return
 	}
 
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		res.WriteHeader(http.StatusInternalServerError)
+	var record models.DataRecordRequest
+	if err := json.NewDecoder(req.Body).Decode(&record); err != nil {
+		a.logger.Errorf("cannot decode body: %w", err)
+		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	parts := bytes.Split(body, []byte(":"))
+	parts := bytes.Split([]byte(record.Data), []byte(":"))
 	if len(parts) <= 1 {
 		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
+	if record.Type == models.PASS || record.Type == models.TEXT {
+		checksum := fmt.Sprintf("%x", md5.Sum([]byte(record.Data)))
+
+		if record.Checksum != checksum {
+			a.logger.Errorf("wrong checksum from request, corrupted data")
+			res.WriteHeader(http.StatusBadRequest)
+			return
+		}
+	}
+
 	data := &models.DataRecord{
-		Type:    models.PASS,
+		Type:    record.Type,
+		Name:    record.Name,
 		Blocked: false,
 	}
 
-	data.Checksum = fmt.Sprintf("%x", md5.Sum(body))
-	data.Data = string(body)
+	if record.ID != 0 {
+		data.ID = record.ID
+	}
+
+	data.Checksum = fmt.Sprintf("%x", md5.Sum([]byte(record.Data)))
+	data.Data = string(record.Data)
 	data.UserID = userID
 
 	if err := a.store.PutDataRecord(data, userID); err != nil {
@@ -184,10 +206,9 @@ func (a *App) PutDataRecord(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, data)
+	c.JSON(http.StatusCreated, data)
 }
 
-//nolint:dupl // code deduplication will lead to bad code extending in future
 func (a *App) GetDataRecords(c *gin.Context) {
 	userID := c.GetUint64(auth.UserIDKey.ToString())
 	res := c.Writer

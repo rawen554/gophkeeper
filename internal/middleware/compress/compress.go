@@ -30,28 +30,17 @@ func newCompressWriter(w gin.ResponseWriter) *compressWriter {
 }
 
 func (c *compressWriter) Write(p []byte) (int, error) {
-	if c.Status() == http.StatusOK {
-		n, err := c.zw.Write(p)
-		if err != nil {
-			return 0, fmt.Errorf("error writing gzipped bytes: %w", err)
-		}
-		c.Header().Set("Content-Length", strconv.Itoa(n))
-
-		return n, nil
-	} else {
-		n, err := c.ResponseWriter.Write(p)
-		if err != nil {
-			return 0, fmt.Errorf("error writing bytes: %w", err)
-		}
-
-		return n, nil
+	n, err := c.zw.Write(p)
+	if err != nil {
+		return 0, fmt.Errorf("error writing gzipped bytes: %w", err)
 	}
+	c.Header().Set("Content-Length", strconv.Itoa(n))
+
+	return n, nil
 }
 
 func (c *compressWriter) WriteHeader(statusCode int) {
-	if c.Status() == http.StatusOK {
-		c.Header().Set(contentEncoding, contentEncodingGzip)
-	}
+	c.Header().Set(contentEncoding, contentEncodingGzip)
 	c.ResponseWriter.WriteHeader(statusCode)
 }
 

@@ -32,6 +32,7 @@ db/data
 
 # Other
 golangci-lint
+roman
 
 # Configs
 .env

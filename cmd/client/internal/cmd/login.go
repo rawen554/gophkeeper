@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"os"
-	"path"
+	"net"
 	"time"
 
 	"github.com/rawen554/goph-keeper/cmd/client/internal/logic"
+	"github.com/rawen554/goph-keeper/internal/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -36,8 +37,16 @@ func Login(ctx context.Context) {
 			var password string
 			fmt.Scanln(&password)
 
-			creds, err := logic.Login(login, password)
+			creds, err := logic.Login(ctx, login, password)
 			if err != nil {
+				var target *net.OpError
+				if errors.As(err, &target) {
+					if err := utils.CreateUsersDir(login); err != nil {
+						fmt.Println("err: %w", err)
+					}
+					fmt.Printf("created local dir for user: %s\n", login)
+				}
+
 				return
 			}
 
@@ -49,9 +58,8 @@ func Login(ctx context.Context) {
 				fmt.Println("err saving config: %w", err)
 			}
 
-			if err := os.MkdirAll(path.Join(".", login), 0600); err != nil {
-				fmt.Printf("error creating user's dir: %v", err)
-				return
+			if err := utils.CreateUsersDir(login); err != nil {
+				fmt.Println("err: %w", err)
 			}
 
 			return

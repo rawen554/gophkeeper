@@ -5,7 +5,8 @@ services:
       context: .
     image: gophkeeper
     environment:
-      - DATABASE_URI=postgres://gophkeeper:P@ssw0rd@gophkeeper-db:5432/gophkeeper?sslmode=disable
+      - DATABASE_DSN=postgres://gophkeeper:P@ssw0rd@gophkeeper-db:5432/gophkeeper?sslmode=disable
+      - GIN_MODE=release
     expose:
       - 8080
     ports:
@@ -13,7 +14,8 @@ services:
     networks:
       - gophkeeper
     depends_on:
-      - gophkeeper-db
+      gophkeeper-db:
+        condition: service_healthy
     stop_grace_period: 5s
 
   gophkeeper-db:
@@ -29,6 +31,12 @@ services:
       - POSTGRES_PASSWORD=P@ssw0rd
     networks:
       - gophkeeper
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready", "-d", "gophkeeper", "-U", "gophkeeper"]
+      interval: 10s
+      timeout: 60s
+      retries: 5
+      start_period: 80s
 
 networks:
   gophkeeper:

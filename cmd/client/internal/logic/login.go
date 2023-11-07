@@ -2,6 +2,7 @@ package logic
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,7 +17,7 @@ type LoginReq struct {
 	Password string `json:"password"`
 }
 
-func Login(login string, password string) (creds *models.TokenResponse, err error) {
+func Login(ctx context.Context, login string, password string) (creds *models.TokenResponse, err error) {
 	httpclient := client.GetHttpClient()
 	if httpclient == nil {
 		return nil, fmt.Errorf("configuration error")
@@ -25,22 +26,22 @@ func Login(login string, password string) (creds *models.TokenResponse, err erro
 
 	b, _ := json.Marshal(LoginReq{Login: login, Password: password})
 
-	request, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(b))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewBuffer(b))
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	// в заголовках запроса указываем кодировку
 	request.Header.Add("Content-Type", "application/json")
 	// отправляем запрос и получаем ответ
 	response, err := httpclient.Do(request)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	// выводим код ответа
 	fmt.Println("Статус-код ", response.Status)
 	defer func() {
 		if err := response.Body.Close(); err != nil {
-			panic(err)
+			fmt.Printf("error: %w", err)
 		}
 	}()
 

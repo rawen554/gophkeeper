@@ -1,6 +1,11 @@
 package models
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+)
 
 var (
 	ErrNoData = errors.New("no data")
@@ -20,4 +25,8 @@ type UserCredentialsSchema struct {
 type TokenResponse struct {
 	Token     string `json:"token"`
 	ExpiresIn int    `json:"expires_in"`
+}
+
+func (u *User) GetUserFolder() ([]fs.DirEntry, error) {
+	return os.ReadDir(fmt.Sprintf("./userdata/%s-%d", u.Login, u.ID))
 }

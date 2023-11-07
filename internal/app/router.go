@@ -21,15 +21,15 @@ func (a *App) SetupRouter() (*gin.Engine, error) {
 		return nil, fmt.Errorf("error creating middleware logger func: %w", err)
 	}
 	r.Use(ginLoggerMiddleware)
-	r.Use(compress.Compress(a.logger))
+	r.Use(compress.Compress(a.logger.Named("gzip")))
 
-	r.POST("/api/user/register", a.Register)
-	r.POST("/api/user/login", a.Login)
-
-	protectedUserAPI := r.Group(userAPIRoute)
-	protectedUserAPI.Use(auth.AuthMiddleware(a.logger))
+	userAPI := r.Group(userAPIRoute)
 	{
-		recordsAPI := protectedUserAPI.Group("record")
+		userAPI.POST("register", a.Register)
+		userAPI.POST("login", a.Login)
+
+		recordsAPI := userAPI.Group("records")
+		recordsAPI.Use(auth.AuthMiddleware(a.logger))
 		{
 			recordsAPI.POST(rootRoute, a.PutDataRecord)
 			recordsAPI.GET(rootRoute, a.GetDataRecords)

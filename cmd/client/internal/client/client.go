@@ -29,9 +29,10 @@ func GetHttpClient() *httpClientInstance {
 				return
 			}
 			httpClient = &httpClientInstance{
-				Client: &http.Client{Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				}},
+				Client: &http.Client{
+					Transport: &http.Transport{
+						TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+					}},
 				ApiURL: apiURL,
 			}
 		})
