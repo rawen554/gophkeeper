@@ -26,6 +26,10 @@ func SaveOrUpdateData(data *models.DataRecord) error {
 		return fmt.Errorf("not logged in")
 	}
 
+	if err := utils.CreateUsersDir(login); err != nil {
+		fmt.Println("err: %w", err)
+	}
+
 	ext := utils.GetExtension(data.Type)
 	filename := fmt.Sprintf("%s%s", data.Name, ext)
 	filepath := filepath.Join(".", login, filename)
@@ -68,31 +72,41 @@ func SaveOrUpdateData(data *models.DataRecord) error {
 	return nil
 }
 
-func GetRecord(ctx context.Context, id string) error {
+func GetRecord(ctx context.Context, name string) (*models.DataRecord, error) {
 	token := viper.GetString("token")
 	if token == "" {
-		return fmt.Errorf("No auth data, login first")
+		return nil, fmt.Errorf("No auth data, login first")
 	}
-
-	idStandartized := strings.ToLower(id)
 
 	httpclient := client.GetHttpClient()
 	if httpclient == nil {
-		return fmt.Errorf("configuration error")
+		return nil, fmt.Errorf("configuration error")
 	}
-	endpoint, _ := url.JoinPath(httpclient.ApiURL, "api/user/records", idStandartized)
+	endpoint, _ := url.JoinPath(httpclient.ApiURL, "api/user/records", name)
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	request.Header.Add("Content-Type", "application/json")
+	request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	response, err := httpclient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("error: %w", err)
+	}
+
+	if response.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("record not found")
 	}
 
 	var record models.DataRecord
-	if err = json.NewDecoder(request.Body).Decode(&record); err != nil {
-		return fmt.Errorf("error decode body: %w", err)
+	if err = json.NewDecoder(response.Body).Decode(&record); err != nil {
+		return nil, fmt.Errorf("error decode body: %w", err)
 	}
 
-	return nil
+	return &record, nil
 }
 
 func PutRecord(ctx context.Context, args []string) (*models.DataRecord, error) {
@@ -193,13 +207,18 @@ func ListRecords(ctx context.Context) ([]models.DataRecord, error) {
 		return nil, err
 	}
 
+	if response.StatusCode == http.StatusNoContent {
+		fmt.Println("no records found")
+		return nil, nil
+	}
+
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("error in listrecords")
+		return nil, fmt.Errorf("error in listrecords\n")
 	}
 
 	records := make([]models.DataRecord, 0)
 	if err = json.NewDecoder(response.Body).Decode(&records); err != nil {
-		return nil, fmt.Errorf("error decode body: %w", err)
+		return nil, fmt.Errorf("error decode body: %w\n", err)
 	}
 
 	return records, nil

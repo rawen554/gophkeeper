@@ -3,15 +3,21 @@ all: ;
 
 .PHONY: run
 run: build
-	./cmd/gophkeeper/gophkeeper -r :8081
+	./cmd/gophkeeper/gophkeeper -r :8080
 
 .PHONY: build-client
 build-client:
-	go build -o ./cmd/client/gclient ./cmd/client
+	go build -o ./cmd/client/bin/client_darwin64 ./cmd/client
+
+.PHONY: build-client-manyplatform
+build-client-manyplatform:
+	GOOS=windows GOARCH=amd64 go build -o ./cmd/client/bin/client_win64 ./cmd/client
+	GOOS=linux GOARCH=amd64 go build -o ./cmd/client/bin/client_linux64 ./cmd/client 
+	GOOS=darwin GOARCH=amd64 go build -o ./cmd/client/bin/client_darwin64 ./cmd/client
 
 .PHONY: run-client
 run-client:
-	./cmd/client/gclient
+	./cmd/client/bin/client
 
 .PHONY: build
 build:

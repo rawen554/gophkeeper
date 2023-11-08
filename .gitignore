@@ -25,7 +25,7 @@ vendor/
 .vscode
 
 # Platform specific
-*/**/.DS_Store
+.DS_Store
 
 # Mounting volumes
 db/data

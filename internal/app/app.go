@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -18,6 +17,7 @@ import (
 	"github.com/rawen554/goph-keeper/internal/models"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type App struct {
@@ -217,30 +217,24 @@ func (a *App) GetDataRecords(c *gin.Context) {
 		return
 	}
 
-	orders, err := a.store.GetUserRecords(userID)
+	records, err := a.store.GetUserRecords(userID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoData) {
 			res.WriteHeader(http.StatusNoContent)
 			return
 		}
 
-		a.logger.Errorf("error getting user orders: %v", err)
+		a.logger.Errorf("error getting user records: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	c.JSON(http.StatusOK, orders)
+	c.JSON(http.StatusOK, records)
 }
 
 func (a *App) GetDataRecord(c *gin.Context) {
 	res := c.Writer
-	recordID := c.Param("id")
-	preparedRecordID, err := strconv.ParseUint(recordID, 10, 64)
-	if err != nil {
-		res.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
+	recordName := c.Param("name")
 	userID := c.GetUint64(auth.UserIDKey.ToString())
 
 	if userID == 0 {
@@ -248,10 +242,10 @@ func (a *App) GetDataRecord(c *gin.Context) {
 		return
 	}
 
-	orders, err := a.store.GetUserRecord(preparedRecordID, userID)
+	orders, err := a.store.GetUserRecord(recordName, userID)
 	if err != nil {
-		if errors.Is(err, models.ErrNoData) {
-			res.WriteHeader(http.StatusNoContent)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			res.WriteHeader(http.StatusNotFound)
 			return
 		}
 

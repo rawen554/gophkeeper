@@ -28,7 +28,7 @@ type Store interface {
 	CreateUser(user *models.User) (int64, error)
 	GetUser(u *models.User) (*models.User, error)
 	PutDataRecord(data *models.DataRecord, userID uint64) error
-	GetUserRecord(recordID uint64, userID uint64) (*models.DataRecord, error)
+	GetUserRecord(recordName string, userID uint64) (*models.DataRecord, error)
 	GetUserRecords(userID uint64) ([]models.DataRecord, error)
 	Ping() error
 	Close()
@@ -143,9 +143,9 @@ func (db *DBStore) PutDataRecord(data *models.DataRecord, userID uint64) error {
 	return nil
 }
 
-func (db *DBStore) GetUserRecord(recordID uint64, userID uint64) (*models.DataRecord, error) {
+func (db *DBStore) GetUserRecord(recordName string, userID uint64) (*models.DataRecord, error) {
 	record := models.DataRecord{}
-	result := db.conn.Where(&models.DataRecord{UserID: userID, ID: recordID}).Find(&record)
+	result := db.conn.Where(&models.DataRecord{UserID: userID, Name: recordName}).First(&record)
 
 	if err := result.Error; err != nil {
 		return nil, fmt.Errorf("error getting order: %w", err)

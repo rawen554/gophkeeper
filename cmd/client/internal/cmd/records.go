@@ -27,7 +27,7 @@ var recordCmd = &cobra.Command{
 var putRecordCmd = &cobra.Command{
 	Use:   "put [record_type] [path|data] [name]",
 	Short: "Put data record",
-	Long:  "[record_type=PASS|TEXT|BIN|CARD]",
+	Long:  "record_type=PASS|TEXT|BIN|CARD\nFor PASS data type required following pattern %LOGIN%:%PASSWORD%\nName is required.",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		record, err := logic.PutRecord(context.Background(), args)
@@ -46,17 +46,22 @@ var putRecordCmd = &cobra.Command{
 		if err := logic.SaveOrUpdateData(record); err != nil {
 			fmt.Printf("error saving locally: %s\n", record.Name)
 		}
+
+		fmt.Printf("%+v\n", record)
 	},
 }
 
 var getRecordCmd = &cobra.Command{
-	Use:   "get [id]",
+	Use:   "get [name]",
 	Short: "Get data record",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := logic.GetRecord(context.Background(), args[0]); err != nil {
+		record, err := logic.GetRecord(context.Background(), args[0])
+		if err != nil {
 			fmt.Printf("error: %v", err)
 		}
+
+		fmt.Printf("%+v\n", record)
 	},
 }
 
@@ -82,5 +87,7 @@ var syncRecordsCmd = &cobra.Command{
 		if err := logic.SyncDataRecords(context.Background()); err != nil {
 			fmt.Printf("error: %v", err)
 		}
+
+		fmt.Println("sync successfull")
 	},
 }

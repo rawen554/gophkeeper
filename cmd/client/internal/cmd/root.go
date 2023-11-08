@@ -31,7 +31,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.cobra.yaml)")
-	rootCmd.PersistentFlags().StringVar(&apiURL, "api", "https://localhost:8082", "API URL")
+	rootCmd.PersistentFlags().StringVar(&apiURL, "api", "https://localhost:8080", "API URL")
 	rootCmd.PersistentFlags().StringP("login", "l", "", "author name for copyright attribution")
 	rootCmd.PersistentFlags().StringP("token", "t", "", "author name for copyright attribution")
 	viper.BindPFlag("api", rootCmd.PersistentFlags().Lookup("api"))
