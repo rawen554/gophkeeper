@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"context"
-	"fmt"
+	"log"
 
+	"github.com/rawen554/goph-keeper/internal/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -16,14 +18,19 @@ var LogoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Logout from gophkeeper",
 	Run: func(cmd *cobra.Command, args []string) {
-		Logout(context.Background())
+		logger, err := logger.NewLogger()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		Logout(context.Background(), logger)
 	},
 }
 
-func Logout(ctx context.Context) {
+func Logout(ctx context.Context, logger *zap.SugaredLogger) {
 	login := viper.GetString("login")
 	if login == "" {
-		fmt.Println("not logged in")
+		logger.Errorln("not logged in")
 		return
 	}
 
@@ -32,8 +39,8 @@ func Logout(ctx context.Context) {
 	viper.Set("expires_at", "")
 
 	if err := viper.WriteConfigAs("./gophkeeper.json"); err != nil {
-		fmt.Println("err saving config: %w", err)
+		logger.Errorf("err saving config: %w", err)
 	}
 
-	fmt.Printf("cleared session: %s\n", login)
+	logger.Infof("cleared session: %s\n", login)
 }

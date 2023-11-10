@@ -2,16 +2,17 @@ package client
 
 import (
 	"crypto/tls"
-	"fmt"
+	"log"
 	"net/http"
 	"sync"
 
+	"github.com/rawen554/goph-keeper/internal/logger"
 	"github.com/spf13/viper"
 )
 
 type httpClientInstance struct {
 	*http.Client
-	ApiURL string
+	APIURL string
 }
 
 var (
@@ -19,12 +20,17 @@ var (
 	once       sync.Once
 )
 
-func GetHttpClient() *httpClientInstance {
+func GetHTTPClient() *httpClientInstance {
 	once.Do(
 		func() {
+			logger, err := logger.NewLogger()
+			if err != nil {
+				log.Fatal(err)
+			}
+
 			apiURL := viper.GetString("api")
 			if apiURL == "" {
-				fmt.Println("empty API URL")
+				logger.Errorln("empty API URL")
 				httpClient = nil
 				return
 			}
@@ -33,7 +39,7 @@ func GetHttpClient() *httpClientInstance {
 					Transport: &http.Transport{
 						TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 					}},
-				ApiURL: apiURL,
+				APIURL: apiURL,
 			}
 		})
 

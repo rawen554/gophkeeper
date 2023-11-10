@@ -17,17 +17,22 @@ import (
 	"github.com/rawen554/goph-keeper/internal/models"
 	"github.com/rawen554/goph-keeper/internal/utils"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
-func SaveOrUpdateData(data *models.DataRecord) error {
+func SaveOrUpdateData(logger *zap.SugaredLogger, data *models.DataRecord) error {
 	login := viper.GetString("login")
 	if login == "" {
-		return fmt.Errorf("not logged in")
+		err := fmt.Errorf("not logged in")
+		logger.Error(err)
+		return err
 	}
 
 	if err := utils.CreateUsersDir(login); err != nil {
-		fmt.Println("err: %w", err)
+		err = fmt.Errorf("error creating users dir: %w", err)
+		logger.Error(err)
+		return err
 	}
 
 	ext := utils.GetExtension(data.Type)
@@ -78,11 +83,11 @@ func GetRecord(ctx context.Context, name string) (*models.DataRecord, error) {
 		return nil, fmt.Errorf("No auth data, login first")
 	}
 
-	httpclient := client.GetHttpClient()
+	httpclient := client.GetHTTPClient()
 	if httpclient == nil {
 		return nil, fmt.Errorf("configuration error")
 	}
-	endpoint, _ := url.JoinPath(httpclient.ApiURL, "api/user/records", name)
+	endpoint, _ := url.JoinPath(httpclient.APIURL, "api/user/records", name)
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -134,11 +139,11 @@ func PutRecord(ctx context.Context, args []string) (*models.DataRecord, error) {
 		return nil, fmt.Errorf("No auth data, login first")
 	}
 
-	httpclient := client.GetHttpClient()
+	httpclient := client.GetHTTPClient()
 	if httpclient == nil {
 		return nil, fmt.Errorf("configuration error")
 	}
-	endpoint, _ := url.JoinPath(httpclient.ApiURL, "api/user/records")
+	endpoint, _ := url.JoinPath(httpclient.APIURL, "api/user/records")
 
 	checksum := fmt.Sprintf("%x", md5.Sum([]byte(data)))
 
@@ -182,20 +187,25 @@ func PutRecord(ctx context.Context, args []string) (*models.DataRecord, error) {
 	return &record, nil
 }
 
-func ListRecords(ctx context.Context) ([]models.DataRecord, error) {
+func ListRecords(ctx context.Context, logger *zap.SugaredLogger) ([]models.DataRecord, error) {
 	token := viper.GetString("token")
 	if token == "" {
-		return nil, fmt.Errorf("no auth data, login first")
+		err := fmt.Errorf("no auth data, login first")
+		logger.Error(err)
+		return nil, err
 	}
 
-	httpclient := client.GetHttpClient()
+	httpclient := client.GetHTTPClient()
 	if httpclient == nil {
-		return nil, fmt.Errorf("configuration error")
+		err := fmt.Errorf("configuration error")
+		logger.Error(err)
+		return nil, err
 	}
-	endpoint, _ := url.JoinPath(httpclient.ApiURL, "api/user/records")
+	endpoint, _ := url.JoinPath(httpclient.APIURL, "api/user/records")
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
+		logger.Error(err)
 		return nil, err
 	}
 
@@ -208,7 +218,7 @@ func ListRecords(ctx context.Context) ([]models.DataRecord, error) {
 	}
 
 	if response.StatusCode == http.StatusNoContent {
-		fmt.Println("no records found")
+		logger.Infoln("no records found")
 		return nil, nil
 	}
 
@@ -224,8 +234,8 @@ func ListRecords(ctx context.Context) ([]models.DataRecord, error) {
 	return records, nil
 }
 
-func SyncDataRecords(ctx context.Context) error {
-	records, err := ListRecords(ctx)
+func SyncDataRecords(ctx context.Context, logger *zap.SugaredLogger) error {
+	records, err := ListRecords(ctx, logger)
 	if err != nil {
 		return err
 	}
@@ -235,7 +245,7 @@ func SyncDataRecords(ctx context.Context) error {
 		data := r
 
 		g.Go(func() error {
-			if err := SaveOrUpdateData(&data); err != nil {
+			if err := SaveOrUpdateData(logger, &data); err != nil {
 				return err
 			}
 

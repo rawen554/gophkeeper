@@ -1,9 +1,10 @@
 package cmd
 
 import (
-	"fmt"
+	"log"
 	"os"
 
+	"github.com/rawen554/goph-keeper/internal/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -41,6 +42,11 @@ func init() {
 }
 
 func initConfig() {
+	logger, err := logger.NewLogger()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
 	} else {
@@ -56,6 +62,6 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
+		logger.Info("Using config file:", viper.ConfigFileUsed())
 	}
 }

@@ -10,14 +10,15 @@ import (
 	"github.com/rawen554/goph-keeper/cmd/client/internal/client"
 	"github.com/rawen554/goph-keeper/internal/models"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
-func Register(login string, password string) (creds *models.TokenResponse, err error) {
-	httpclient := client.GetHttpClient()
+func Register(logger *zap.SugaredLogger, login string, password string) (creds *models.TokenResponse, err error) {
+	httpclient := client.GetHTTPClient()
 	if httpclient == nil {
 		return nil, fmt.Errorf("configuration error")
 	}
-	endpoint, _ := url.JoinPath(httpclient.ApiURL, "api/user/register")
+	endpoint, _ := url.JoinPath(httpclient.APIURL, "api/user/register")
 
 	b, _ := json.Marshal(LoginReq{Login: login, Password: password})
 
@@ -25,18 +26,17 @@ func Register(login string, password string) (creds *models.TokenResponse, err e
 	if err != nil {
 		return nil, fmt.Errorf("error: %w\n", err)
 	}
-	// в заголовках запроса указываем кодировку
+
 	request.Header.Add("Content-Type", "application/json")
-	// отправляем запрос и получаем ответ
+
 	response, err := httpclient.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("error: %w\n", err)
 	}
-	// выводим код ответа
-	fmt.Println("Статус-код ", response.Status)
+
 	defer func() {
 		if err := response.Body.Close(); err != nil {
-			fmt.Printf("error: %w\n", err)
+			logger.Errorf("error: %w\n", err)
 		}
 	}()
 
@@ -49,7 +49,7 @@ func Register(login string, password string) (creds *models.TokenResponse, err e
 		return nil, fmt.Errorf("error decode body: %w\n", err)
 	}
 
-	viper.Set("api", httpclient.ApiURL)
+	viper.Set("api", httpclient.APIURL)
 
 	return creds, nil
 }

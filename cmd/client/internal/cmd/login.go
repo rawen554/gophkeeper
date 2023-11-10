@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"time"
 
 	"github.com/rawen554/goph-keeper/cmd/client/internal/logic"
+	"github.com/rawen554/goph-keeper/internal/logger"
 	"github.com/rawen554/goph-keeper/internal/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -21,30 +24,35 @@ var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Login to gophkeeper",
 	Run: func(cmd *cobra.Command, args []string) {
-		Login(context.Background())
+		logger, err := logger.NewLogger()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		Login(context.Background(), logger.Named("login"))
 	},
 }
 
-func Login(ctx context.Context) {
+func Login(ctx context.Context, logger *zap.SugaredLogger) {
 	for {
 		token := viper.GetString("token")
 		if token == "" {
-			fmt.Println("Login:")
+			logger.Infoln("Login:")
 			var login string
 			fmt.Scanln(&login)
 
-			fmt.Println("Password:")
+			logger.Infoln("Password:")
 			var password string
 			fmt.Scanln(&password)
 
-			creds, err := logic.Login(ctx, login, password)
+			creds, err := logic.Login(ctx, logger.Named("logic"), login, password)
 			if err != nil {
 				var target *net.OpError
 				if errors.As(err, &target) {
 					if err := utils.CreateUsersDir(login); err != nil {
-						fmt.Println("err: %w", err)
+						logger.Errorf("err: %w", err)
 					}
-					fmt.Printf("created local dir for user: %s\n", login)
+					logger.Infof("created local dir for user: %s\n", login)
 				}
 
 				return
@@ -55,11 +63,11 @@ func Login(ctx context.Context) {
 			viper.Set("expires_at", time.Now().Add(time.Duration(creds.ExpiresIn)*time.Second))
 
 			if err := viper.WriteConfigAs("./gophkeeper.json"); err != nil {
-				fmt.Println("err saving config: %w", err)
+				logger.Errorf("err saving config: %w", err)
 			}
 
 			if err := utils.CreateUsersDir(login); err != nil {
-				fmt.Println("err: %w", err)
+				logger.Errorf("err: %w", err)
 			}
 
 			return

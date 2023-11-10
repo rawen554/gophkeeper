@@ -10,6 +10,7 @@ import (
 
 	"github.com/rawen554/goph-keeper/cmd/client/internal/client"
 	"github.com/rawen554/goph-keeper/internal/models"
+	"go.uber.org/zap"
 )
 
 type LoginReq struct {
@@ -17,12 +18,12 @@ type LoginReq struct {
 	Password string `json:"password"`
 }
 
-func Login(ctx context.Context, login string, password string) (creds *models.TokenResponse, err error) {
-	httpclient := client.GetHttpClient()
+func Login(ctx context.Context, logger *zap.SugaredLogger, login string, password string) (creds *models.TokenResponse, err error) {
+	httpclient := client.GetHTTPClient()
 	if httpclient == nil {
 		return nil, fmt.Errorf("configuration error")
 	}
-	endpoint, _ := url.JoinPath(httpclient.ApiURL, "api/user/login")
+	endpoint, _ := url.JoinPath(httpclient.APIURL, "api/user/login")
 
 	b, _ := json.Marshal(LoginReq{Login: login, Password: password})
 
@@ -30,18 +31,17 @@ func Login(ctx context.Context, login string, password string) (creds *models.To
 	if err != nil {
 		return nil, err
 	}
-	// в заголовках запроса указываем кодировку
+
 	request.Header.Add("Content-Type", "application/json")
-	// отправляем запрос и получаем ответ
+
 	response, err := httpclient.Do(request)
 	if err != nil {
 		return nil, err
 	}
-	// выводим код ответа
-	fmt.Println("Статус-код ", response.Status)
+
 	defer func() {
 		if err := response.Body.Close(); err != nil {
-			fmt.Printf("error: %w", err)
+			logger.Errorf("error: %w", err)
 		}
 	}()
 
