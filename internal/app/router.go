@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	emptyRoute   = ""
+	rootRoute    = "/"
 	userAPIRoute = "/api/user"
 )
 
@@ -21,25 +21,19 @@ func (a *App) SetupRouter() (*gin.Engine, error) {
 		return nil, fmt.Errorf("error creating middleware logger func: %w", err)
 	}
 	r.Use(ginLoggerMiddleware)
-	r.Use(compress.Compress(a.logger))
+	r.Use(compress.Compress(a.logger.Named("gzip")))
 
-	r.POST("/api/user/register", a.Register)
-	r.POST("/api/user/login", a.Login)
-
-	protectedUserAPI := r.Group(userAPIRoute)
-	protectedUserAPI.Use(auth.AuthMiddleware(a.config.Key, a.logger))
+	userAPI := r.Group(userAPIRoute)
 	{
-		protectedUserAPI.GET("withdrawals", a.GetWithdrawals)
-		ordersAPI := protectedUserAPI.Group("orders")
-		{
-			ordersAPI.POST(emptyRoute, a.PutOrder)
-			ordersAPI.GET(emptyRoute, a.GetOrders)
-		}
+		userAPI.POST("register", a.Register)
+		userAPI.POST("login", a.Login)
 
-		balanceAPI := protectedUserAPI.Group("balance")
+		recordsAPI := userAPI.Group("records")
+		recordsAPI.Use(auth.AuthMiddleware(a.logger))
 		{
-			balanceAPI.GET(emptyRoute, a.GetBalance)
-			balanceAPI.POST("withdraw", a.BalanceWithdraw)
+			recordsAPI.POST(rootRoute, a.PutDataRecord)
+			recordsAPI.GET(rootRoute, a.GetDataRecords)
+			recordsAPI.GET(":id", a.GetDataRecord)
 		}
 	}
 

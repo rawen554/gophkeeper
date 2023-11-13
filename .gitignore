@@ -15,6 +15,7 @@
 # Binaries
 cmd/gophkeeper/main
 cmd/gophkeeper/goph-keeper
+cmd/client/gclient
 
 # Dependency directories (remove the comment below to include it)
 vendor/
@@ -24,14 +25,19 @@ vendor/
 .vscode
 
 # Platform specific
-*/**/.DS_Store
+.DS_Store
 
 # Mounting volumes
 db/data
 
 # Other
-short-url-db.json
 golangci-lint
+roman
 
 # Configs
 .env
+gophkeeper.json
+
+# Certs
+*.key
+*.pem
